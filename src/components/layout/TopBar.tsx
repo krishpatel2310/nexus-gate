@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ChevronDown,
   Database,
@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 type Environment = "development" | "production";
 type SystemHealth = "healthy" | "degraded" | "critical";
@@ -32,11 +33,17 @@ export function TopBar({
   redisConnected = true,
 }: TopBarProps) {
   const [env, setEnv] = useState<Environment>(environment);
+  const { user, logout, isAuthenticated } = useAuth();
 
   const healthConfig = {
     healthy: { label: "All Systems Operational", color: "bg-success" },
     degraded: { label: "Degraded Performance", color: "bg-warning" },
     critical: { label: "Critical Issues", color: "bg-destructive" },
+  };
+
+  const handleLogout = () => {
+    logout();
+    window.location.href = "/";
   };
 
   return (
@@ -112,7 +119,7 @@ export function TopBar({
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary">
                 <User className="h-4 w-4" />
               </div>
-              <span className="text-sm">Admin</span>
+              <span className="text-sm">{user?.name || user?.email || "Admin"}</span>
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
@@ -120,7 +127,7 @@ export function TopBar({
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Preferences</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign Out
             </DropdownMenuItem>

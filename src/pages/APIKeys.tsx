@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Copy, Plus, Key, AlertTriangle, MoreVertical, Eye, EyeOff } from "lucide-react";
+import { Copy, Plus, Key, AlertTriangle, MoreVertical, Eye, EyeOff, Trash2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -33,71 +34,45 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-
-interface APIKey {
-  id: string;
-  name: string;
-  prefix: string;
-  status: "active" | "revoked" | "expired";
-  usage: number;
-  limit: number;
-  createdAt: string;
-  expiresAt: string | null;
-}
-
-const apiKeys: APIKey[] = [
-  {
-    id: "1",
-    name: "Production Backend",
-    prefix: "nxg_live_7kX9",
-    status: "active",
-    usage: 45230,
-    limit: 100000,
-    createdAt: "2024-01-15",
-    expiresAt: "2025-01-15",
-  },
-  {
-    id: "2",
-    name: "Mobile App",
-    prefix: "nxg_live_3mP2",
-    status: "active",
-    usage: 78900,
-    limit: 100000,
-    createdAt: "2024-02-20",
-    expiresAt: null,
-  },
-  {
-    id: "3",
-    name: "Legacy Integration",
-    prefix: "nxg_live_9qR5",
-    status: "expired",
-    usage: 0,
-    limit: 50000,
-    createdAt: "2023-06-01",
-    expiresAt: "2024-06-01",
-  },
-  {
-    id: "4",
-    name: "Testing Key",
-    prefix: "nxg_test_1aB4",
-    status: "revoked",
-    usage: 1200,
-    limit: 10000,
-    createdAt: "2024-03-01",
-    expiresAt: null,
-  },
-];
+import { useAPIKeys, useCreateAPIKey, useUpdateAPIKey, useDeleteAPIKey } from "@/hooks/use-api-keys";
+import type { APIKey } from "@/lib/api";
 
 export default function APIKeys() {
   const [showNewKey, setShowNewKey] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyLimit, setNewKeyLimit] = useState("100000");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
 
-  const handleCreateKey = () => {
-    // Simulate key generation
-    const key = `nxg_live_${Math.random().toString(36).substring(2, 6)}_${Math.random().toString(36).substring(2, 34)}`;
-    setGeneratedKey(key);
+  const { data: apiKeys, isLoading, error } = useAPIKeys();
+  const createMutation = useCreateAPIKey();
+  const updateMutation = useUpdateAPIKey();
+  const deleteMutation = useDeleteAPIKey();
+
+  const handleCreateKey = async () => {
+    try {
+      const result = await createMutation.mutateAsync({
+        name: newKeyName,
+        limit: parseInt(newKeyLimit),
+      });
+      // The API should return the full key only on creation
+      if (result.key) {
+        setGeneratedKey(result.key);
+      } else {
+        // Fallback for display purposes
+        setGeneratedKey(`${result.prefix}...${Math.random().toString(36).substring(2, 34)}`);
+      }
+      toast({
+        title: "API key created",
+        description: "Store this key securely - it won't be shown again",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to create API key",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCopyKey = () => {
@@ -108,6 +83,51 @@ export default function APIKeys() {
         description: "API key has been copied securely",
       });
     }
+  };
+
+  const handleRevokeKey = async (key: APIKey) => {
+    try {
+      await updateMutation.mutateAsync({
+        id: key.id,
+        payload: { status: "revoked" },
+      });
+      toast({
+        title: "API key revoked",
+        description: `${key.name} has been revoked`,
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to revoke API key",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteKey = async (key: APIKey) => {
+    if (!confirm(`Are you sure you want to delete ${key.name}?`)) return;
+    
+    try {
+      await deleteMutation.mutateAsync(key.id);
+      toast({
+        title: "API key deleted",
+        description: `${key.name} has been permanently removed`,
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to delete API key",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resetDialog = () => {
+    setShowNewKey(false);
+    setGeneratedKey(null);
+    setNewKeyName("");
+    setNewKeyLimit("100000");
+    setShowKey(false);
   };
 
   const getStatusVariant = (status: string) => {
@@ -121,6 +141,11 @@ export default function APIKeys() {
       default:
         return "muted";
     }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "Never";
+    return new Date(dateString).toLocaleDateString();
   };
 
   return (
@@ -158,6 +183,17 @@ export default function APIKeys() {
                       value={newKeyName}
                       onChange={(e) => setNewKeyName(e.target.value)}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="keyLimit">Usage Limit</Label>
+                    <Input
+                      id="keyLimit"
+                      type="number"
+                      placeholder="100000"
+                      value={newKeyLimit}
+                      onChange={(e) => setNewKeyLimit(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Maximum requests allowed</p>
                   </div>
                   <Alert className="border-warning bg-warning/10">
                     <AlertTriangle className="h-4 w-4 text-warning" />
@@ -202,103 +238,138 @@ export default function APIKeys() {
 
               <DialogFooter>
                 {!generatedKey ? (
-                  <Button onClick={handleCreateKey} disabled={!newKeyName}>
-                    Generate Key
+                  <Button
+                    onClick={handleCreateKey}
+                    disabled={!newKeyName || createMutation.isPending}
+                  >
+                    {createMutation.isPending ? "Generating..." : "Generate Key"}
                   </Button>
                 ) : (
-                  <Button
-                    onClick={() => {
-                      setShowNewKey(false);
-                      setGeneratedKey(null);
-                      setNewKeyName("");
-                      setShowKey(false);
-                    }}
-                  >
-                    Done
-                  </Button>
+                  <Button onClick={resetDialog}>Done</Button>
                 )}
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-border bg-card"
-        >
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Name</TableHead>
-                <TableHead>Key Prefix</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Usage</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {apiKeys.map((key) => (
-                <TableRow key={key.id}>
-                  <TableCell className="font-medium">{key.name}</TableCell>
-                  <TableCell>
-                    <code className="rounded bg-secondary px-2 py-1 font-mono text-xs">
-                      {key.prefix}...
-                    </code>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge variant={getStatusVariant(key.status)}>
-                      {key.status.charAt(0).toUpperCase() + key.status.slice(1)}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Progress
-                        value={(key.usage / key.limit) * 100}
-                        className="h-1.5 w-20"
-                        indicatorClassName={
-                          key.usage / key.limit >= 0.9
-                            ? "bg-destructive"
-                            : key.usage / key.limit >= 0.7
-                            ? "bg-warning"
-                            : "bg-success"
-                        }
-                      />
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {key.usage.toLocaleString()} / {key.limit.toLocaleString()}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {key.createdAt}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {key.expiresAt || "Never"}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuItem>Regenerate</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">
-                          Revoke Key
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+        {error ? (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+            <p className="text-destructive">Failed to load API keys</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {error instanceof Error ? error.message : "Unknown error"}
+            </p>
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-lg border border-border bg-card"
+          >
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Name</TableHead>
+                  <TableHead>Key Prefix</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Usage</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Expires</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </motion.div>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  [...Array(4)].map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : !apiKeys?.length ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No API keys created yet
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  apiKeys.map((key) => (
+                    <TableRow key={key.id}>
+                      <TableCell className="font-medium">{key.name}</TableCell>
+                      <TableCell>
+                        <code className="rounded bg-secondary px-2 py-1 font-mono text-xs">
+                          {key.prefix}...
+                        </code>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={getStatusVariant(key.status)}>
+                          {key.status.charAt(0).toUpperCase() + key.status.slice(1)}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Progress
+                            value={(key.usage / key.limit) * 100}
+                            className="h-1.5 w-20"
+                            indicatorClassName={
+                              key.usage / key.limit >= 0.9
+                                ? "bg-destructive"
+                                : key.usage / key.limit >= 0.7
+                                ? "bg-warning"
+                                : "bg-success"
+                            }
+                          />
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {key.usage.toLocaleString()} / {key.limit.toLocaleString()}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(key.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(key.expiresAt)}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>View Details</DropdownMenuItem>
+                            <DropdownMenuItem>Regenerate</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {key.status === "active" && (
+                              <DropdownMenuItem
+                                className="text-warning"
+                                onClick={() => handleRevokeKey(key)}
+                              >
+                                Revoke Key
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDeleteKey(key)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Key
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </motion.div>
+        )}
       </div>
     </DashboardLayout>
   );
