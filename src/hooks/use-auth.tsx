@@ -1,74 +1,52 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { usersService, authService, getAuthToken, removeAuthToken } from "@/lib/api";
-import type { User, SignInPayload, RegisterUserPayload } from "@/lib/api";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { usersService, getCurrentUserFromStorage } from "@/lib/api";
+import type { SignInPayload, RegisterUserPayload, SignInResponse } from "@/lib/api";
+
+interface AuthUser {
+  userId: number;
+  email: string;
+  fullName: string;
+  role: string;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (payload: SignInPayload) => Promise<void>;
+  login: (payload: SignInPayload) => Promise<SignInResponse>;
   register: (payload: RegisterUserPayload) => Promise<void>;
   logout: () => void;
-  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshUser = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token) {
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const userData = await usersService.getCurrentUser();
-      setUser(userData);
-    } catch (error) {
-      console.error("Failed to fetch user:", error);
-      removeAuthToken();
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
+  useEffect(() => {
+    const storedUser = getCurrentUserFromStorage();
+    if (storedUser) setUser(storedUser);
+    setIsLoading(false);
   }, []);
 
-  useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
-
-  const login = async (payload: SignInPayload) => {
+  const login = async (payload: SignInPayload): Promise<SignInResponse> => {
     const response = await usersService.signIn(payload);
-    setUser(response.user);
+    setUser({ userId: response.userId, email: response.email, fullName: response.fullName, role: response.role });
+    return response;
   };
 
   const register = async (payload: RegisterUserPayload) => {
-    const response = await usersService.register(payload);
-    setUser(response.user);
+    await usersService.register(payload);
   };
 
   const logout = () => {
-    authService.logout();
+    usersService.logout();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated: !!user,
-        login,
-        register,
-        logout,
-        refreshUser,
-      }}
-    >
+    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -76,8 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }

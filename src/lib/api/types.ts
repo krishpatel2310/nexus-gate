@@ -1,16 +1,17 @@
-// User types
+// User types - matching backend exactly
 export interface User {
-  id: string;
+  id: number;
   email: string;
-  name?: string;
+  fullName: string;
+  role: "ADMIN" | "USER";
   createdAt: string;
-  updatedAt?: string;
 }
 
 export interface RegisterUserPayload {
   email: string;
   password: string;
-  name?: string;
+  fullName: string;
+  role?: "ADMIN" | "USER";
 }
 
 export interface SignInPayload {
@@ -18,141 +19,135 @@ export interface SignInPayload {
   password: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: User;
-  refreshToken?: string;
+export interface SignInResponse {
+  userId: number;
+  email: string;
+  fullName: string;
+  role: string;
+  message: string;
 }
 
-// API Key types
+// API Key types - matching backend exactly
 export interface APIKey {
-  id: string;
-  name: string;
-  key?: string;
-  prefix: string;
-  userId: string;
-  status: "active" | "revoked" | "expired";
-  usage: number;
-  limit: number;
-  createdAt: string;
+  id: number;
+  keyValue: string;
+  keyName: string;
+  clientName: string;
+  clientEmail: string;
+  clientCompany: string;
+  createdByUserId: number;
+  isActive: boolean;
   expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  notes: string | null;
 }
 
 export interface CreateAPIKeyPayload {
-  name: string;
-  limit?: number;
+  keyName: string;
+  clientName: string;
+  clientEmail: string;
+  clientCompany: string;
+  createdByUserId: number;
   expiresAt?: string;
+  notes?: string;
 }
 
 export interface UpdateAPIKeyPayload {
-  name?: string;
-  limit?: number;
-  status?: "active" | "revoked";
+  keyName?: string;
+  clientName?: string;
+  clientEmail?: string;
+  clientCompany?: string;
+  createdByUserId?: number;
+  expiresAt?: string;
+  notes?: string;
 }
 
-// Service Route types
+// Service Route types - matching backend exactly
 export interface ServiceRoute {
-  id: string;
-  name: string;
-  path: string;
+  id: number;
+  serviceName: string;
+  serviceDescription: string;
+  publicPath: string;
   targetUrl: string;
-  method: string;
-  status: "active" | "inactive";
-  healthStatus: "healthy" | "degraded" | "down";
-  p95Latency: number;
-  errorRate: number;
-  requestsPerHour: number;
-  rateLimitUsage: number;
+  allowedMethods: string[];
+  rateLimitPerMinute: number;
+  rateLimitPerHour: number;
+  isActive: boolean;
+  createdByUserId: number;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
+  notes: string | null;
 }
 
 export interface CreateServiceRoutePayload {
-  name: string;
-  path: string;
+  serviceName: string;
+  serviceDescription: string;
+  publicPath: string;
   targetUrl: string;
-  method?: string;
+  allowedMethods: string[];
+  rateLimitPerMinute: number;
+  rateLimitPerHour: number;
+  createdByUserId: number;
+  notes?: string;
 }
 
 export interface UpdateServiceRoutePayload {
-  name?: string;
-  path?: string;
+  serviceName?: string;
+  serviceDescription?: string;
+  publicPath?: string;
   targetUrl?: string;
-  method?: string;
-  status?: "active" | "inactive";
+  allowedMethods?: string[];
+  rateLimitPerMinute?: number;
+  rateLimitPerHour?: number;
+  createdByUserId?: number;
+  notes?: string;
 }
 
-// Rate Limit types
+// Rate Limit types - matching backend exactly
 export interface RateLimit {
-  id: string;
-  name?: string;
-  apiKeyId?: string;
-  serviceRouteId?: string;
-  requests: number;
-  timeWindow: "second" | "minute" | "hour";
-  algorithm: "token-bucket" | "fixed-window" | "sliding-window" | "leaky-bucket";
-  burstEnabled: boolean;
-  burstSize: number;
-  status: "active" | "inactive";
+  id: number;
+  apiKeyId: number | null;
+  serviceRouteId: number | null;
+  requestsPerMinute: number;
+  requestsPerHour: number;
+  requestsPerDay: number;
+  isActive: boolean;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
+  notes: string | null;
 }
 
 export interface CreateRateLimitPayload {
-  apiKeyId?: string;
-  serviceRouteId?: string;
-  requests: number;
-  timeWindow: "second" | "minute" | "hour";
-  algorithm: string;
-  burstEnabled?: boolean;
-  burstSize?: number;
+  apiKeyId?: number | null;
+  serviceRouteId?: number | null;
+  requestsPerMinute: number;
+  requestsPerHour: number;
+  requestsPerDay: number;
+  notes?: string;
 }
 
 export interface UpdateRateLimitPayload {
-  requests?: number;
-  timeWindow?: "second" | "minute" | "hour";
-  algorithm?: string;
-  burstEnabled?: boolean;
-  burstSize?: number;
+  apiKeyId?: number | null;
+  serviceRouteId?: number | null;
+  requestsPerMinute?: number;
+  requestsPerHour?: number;
+  requestsPerDay?: number;
+  notes?: string;
 }
 
 export interface RateLimitCheckResult {
-  allowed: boolean;
-  remaining: number;
-  resetAt: string;
-  limit: number;
+  requestsPerMinute: number;
+  requestsPerHour: number;
+  requestsPerDay: number;
+  source: "SPECIFIC" | "ROUTE_DEFAULT" | "KEY_GLOBAL" | "SYSTEM_DEFAULT";
+  rateLimitId: number | null;
+  apiKeyId: number | null;
+  serviceRouteId: number | null;
+  notes: string | null;
 }
 
-// Load Test types
-export interface LoadTestConfig {
-  targetUrl: string;
-  duration: number;
-  concurrency: number;
-  requestsPerSecond: number;
-}
-
-export interface LoadTestStatus {
-  testId: string;
-  status: "running" | "completed" | "stopped" | "failed";
-  progress: number;
-  startedAt: string;
-  endedAt?: string;
-}
-
-export interface LoadTestResults {
-  testId: string;
-  totalRequests: number;
-  successfulRequests: number;
-  failedRequests: number;
-  avgLatency: number;
-  p95Latency: number;
-  p99Latency: number;
-  requestsPerSecond: number;
-  errorRate: number;
-  duration: number;
-}
-
-// Log/Violation types
+// Log/Violation types (mock data)
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -165,7 +160,7 @@ export interface LogEntry {
   requestId?: string;
 }
 
-// Overview/Metrics types
+// Overview/Metrics types (mock data)
 export interface SystemMetrics {
   requestsPerSecond: number;
   p95Latency: number;
@@ -180,9 +175,11 @@ export interface TrafficDataPoint {
   errors: number;
 }
 
-// API Response wrapper
-export interface APIResponse<T> {
-  data?: T;
-  error?: string;
-  message?: string;
+// API Response wrapper for errors
+export interface APIErrorResponse {
+  timestamp: string;
+  status: number;
+  error: string;
+  message: string;
+  path: string;
 }

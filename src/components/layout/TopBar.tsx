@@ -119,7 +119,7 @@ export function TopBar({
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary">
                 <User className="h-4 w-4" />
               </div>
-              <span className="text-sm">{user?.name || user?.email || "Admin"}</span>
+              <span className="text-sm">{user?.fullName || user?.email || "Admin"}</span>
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
