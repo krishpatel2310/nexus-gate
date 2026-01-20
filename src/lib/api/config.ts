@@ -1,8 +1,6 @@
-// API Base URLs - Configure these based on your backend deployment
+// API Base URL - Config Service on port 8082
 export const API_CONFIG = {
-  CONFIG_SERVICE_URL: import.meta.env.VITE_CONFIG_SERVICE_URL || "http://localhost:8080",
-  AUTH_SERVICE_URL: import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8081",
-  LOAD_TESTER_URL: import.meta.env.VITE_LOAD_TESTER_URL || "http://localhost:8082",
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8082",
 };
 
 // Helper to get auth token from storage
@@ -18,6 +16,37 @@ export const setAuthToken = (token: string): void => {
 // Helper to remove auth token
 export const removeAuthToken = (): void => {
   localStorage.removeItem("nexusgate_token");
+};
+
+// Helper to get current user from storage
+export const getCurrentUserFromStorage = (): {
+  userId: number;
+  email: string;
+  fullName: string;
+  role: string;
+} | null => {
+  const userStr = localStorage.getItem("nexusgate_user");
+  if (!userStr) return null;
+  try {
+    return JSON.parse(userStr);
+  } catch {
+    return null;
+  }
+};
+
+// Helper to set current user
+export const setCurrentUser = (user: {
+  userId: number;
+  email: string;
+  fullName: string;
+  role: string;
+}): void => {
+  localStorage.setItem("nexusgate_user", JSON.stringify(user));
+};
+
+// Helper to remove current user
+export const removeCurrentUser = (): void => {
+  localStorage.removeItem("nexusgate_user");
 };
 
 // Default headers for API requests

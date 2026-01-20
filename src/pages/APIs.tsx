@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Search, Filter, ExternalLink, Plus, Trash2, Power } from "lucide-react";
+import { Search, Filter, ExternalLink, Plus, Trash2, Power, Eye, Pencil } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -25,62 +25,70 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Link } from "react-router-dom";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import {
   useServiceRoutes,
   useCreateServiceRoute,
   useToggleServiceRoute,
   useDeleteServiceRoute,
+  useUpdateServiceRoute,
 } from "@/hooks/use-service-routes";
-import type { ServiceRoute } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
+import type { ServiceRoute, CreateServiceRoutePayload } from "@/lib/api";
+
+const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
 
 export default function APIs() {
   const [search, setSearch] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newRoute, setNewRoute] = useState({ name: "", path: "", targetUrl: "" });
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [selectedRoute, setSelectedRoute] = useState<ServiceRoute | null>(null);
+  const [newRoute, setNewRoute] = useState<CreateServiceRoutePayload>({
+    serviceName: "",
+    serviceDescription: "",
+    publicPath: "",
+    targetUrl: "",
+    allowedMethods: ["GET"],
+    rateLimitPerMinute: 100,
+    rateLimitPerHour: 5000,
+    createdByUserId: 1,
+    notes: "",
+  });
 
+  const { user } = useAuth();
   const { data: serviceRoutes, isLoading, error } = useServiceRoutes();
   const createMutation = useCreateServiceRoute();
   const toggleMutation = useToggleServiceRoute();
   const deleteMutation = useDeleteServiceRoute();
+  const updateMutation = useUpdateServiceRoute();
 
   const filteredAPIs = (serviceRoutes || []).filter(
     (api) =>
-      api.name.toLowerCase().includes(search.toLowerCase()) ||
-      api.path.toLowerCase().includes(search.toLowerCase())
+      api.serviceName.toLowerCase().includes(search.toLowerCase()) ||
+      api.publicPath.toLowerCase().includes(search.toLowerCase())
   );
-
-  const getHealthVariant = (route: ServiceRoute) => {
-    if (route.status === "inactive") return "muted";
-    const health = route.healthStatus || "healthy";
-    switch (health) {
-      case "healthy":
-        return "success";
-      case "degraded":
-        return "warning";
-      case "down":
-        return "error";
-      default:
-        return "muted";
-    }
-  };
-
-  const getHealthLabel = (route: ServiceRoute) => {
-    if (route.status === "inactive") return "Inactive";
-    const health = route.healthStatus || "healthy";
-    return health.charAt(0).toUpperCase() + health.slice(1);
-  };
 
   const handleCreate = async () => {
     try {
-      await createMutation.mutateAsync(newRoute);
+      await createMutation.mutateAsync({
+        ...newRoute,
+        createdByUserId: user?.userId || 1,
+      });
       toast({
         title: "Service route created",
-        description: `${newRoute.name} has been registered successfully`,
+        description: `${newRoute.serviceName} has been registered successfully`,
       });
       setShowCreateDialog(false);
-      setNewRoute({ name: "", path: "", targetUrl: "" });
+      resetForm();
     } catch (error) {
       toast({
         title: "Failed to create service route",
@@ -90,7 +98,39 @@ export default function APIs() {
     }
   };
 
-  const handleToggle = async (id: string, name: string) => {
+  const handleUpdate = async () => {
+    if (!selectedRoute) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: selectedRoute.id,
+        payload: {
+          serviceName: newRoute.serviceName,
+          serviceDescription: newRoute.serviceDescription,
+          publicPath: newRoute.publicPath,
+          targetUrl: newRoute.targetUrl,
+          allowedMethods: newRoute.allowedMethods,
+          rateLimitPerMinute: newRoute.rateLimitPerMinute,
+          rateLimitPerHour: newRoute.rateLimitPerHour,
+          notes: newRoute.notes,
+        },
+      });
+      toast({
+        title: "Service route updated",
+        description: `${newRoute.serviceName} has been updated`,
+      });
+      setShowEditDialog(false);
+      setSelectedRoute(null);
+      resetForm();
+    } catch (error) {
+      toast({
+        title: "Failed to update service route",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggle = async (id: number, name: string) => {
     try {
       await toggleMutation.mutateAsync(id);
       toast({
@@ -106,7 +146,7 @@ export default function APIs() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
+  const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Are you sure you want to delete ${name}?`)) return;
     
     try {
@@ -124,66 +164,175 @@ export default function APIs() {
     }
   };
 
+  const resetForm = () => {
+    setNewRoute({
+      serviceName: "",
+      serviceDescription: "",
+      publicPath: "",
+      targetUrl: "",
+      allowedMethods: ["GET"],
+      rateLimitPerMinute: 100,
+      rateLimitPerHour: 5000,
+      createdByUserId: user?.userId || 1,
+      notes: "",
+    });
+  };
+
+  const openEditDialog = (route: ServiceRoute) => {
+    setSelectedRoute(route);
+    setNewRoute({
+      serviceName: route.serviceName,
+      serviceDescription: route.serviceDescription,
+      publicPath: route.publicPath,
+      targetUrl: route.targetUrl,
+      allowedMethods: route.allowedMethods,
+      rateLimitPerMinute: route.rateLimitPerMinute,
+      rateLimitPerHour: route.rateLimitPerHour,
+      createdByUserId: route.createdByUserId,
+      notes: route.notes || "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const openViewDialog = (route: ServiceRoute) => {
+    setSelectedRoute(route);
+    setShowViewDialog(true);
+  };
+
+  const toggleMethod = (method: string) => {
+    if (newRoute.allowedMethods.includes(method)) {
+      setNewRoute({
+        ...newRoute,
+        allowedMethods: newRoute.allowedMethods.filter((m) => m !== method),
+      });
+    } else {
+      setNewRoute({
+        ...newRoute,
+        allowedMethods: [...newRoute.allowedMethods, method],
+      });
+    }
+  };
+
+  const RouteFormFields = () => (
+    <div className="space-y-4 py-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="serviceName">Service Name *</Label>
+          <Input
+            id="serviceName"
+            placeholder="e.g., user-service"
+            value={newRoute.serviceName}
+            onChange={(e) => setNewRoute({ ...newRoute, serviceName: e.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="publicPath">Public Path *</Label>
+          <Input
+            id="publicPath"
+            placeholder="e.g., /api/users/**"
+            value={newRoute.publicPath}
+            onChange={(e) => setNewRoute({ ...newRoute, publicPath: e.target.value })}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="serviceDescription">Description</Label>
+        <Textarea
+          id="serviceDescription"
+          placeholder="Describe what this service does"
+          value={newRoute.serviceDescription}
+          onChange={(e) => setNewRoute({ ...newRoute, serviceDescription: e.target.value })}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="targetUrl">Target URL *</Label>
+        <Input
+          id="targetUrl"
+          placeholder="e.g., http://localhost:8080/users"
+          value={newRoute.targetUrl}
+          onChange={(e) => setNewRoute({ ...newRoute, targetUrl: e.target.value })}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Allowed Methods</Label>
+        <div className="flex flex-wrap gap-2">
+          {HTTP_METHODS.map((method) => (
+            <Button
+              key={method}
+              type="button"
+              variant={newRoute.allowedMethods.includes(method) ? "default" : "outline"}
+              size="sm"
+              onClick={() => toggleMethod(method)}
+            >
+              {method}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="rateLimitPerMinute">Rate Limit / Minute</Label>
+          <Input
+            id="rateLimitPerMinute"
+            type="number"
+            value={newRoute.rateLimitPerMinute}
+            onChange={(e) => setNewRoute({ ...newRoute, rateLimitPerMinute: parseInt(e.target.value) || 0 })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="rateLimitPerHour">Rate Limit / Hour</Label>
+          <Input
+            id="rateLimitPerHour"
+            type="number"
+            value={newRoute.rateLimitPerHour}
+            onChange={(e) => setNewRoute({ ...newRoute, rateLimitPerHour: parseInt(e.target.value) || 0 })}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea
+          id="notes"
+          placeholder="Additional notes"
+          value={newRoute.notes}
+          onChange={(e) => setNewRoute({ ...newRoute, notes: e.target.value })}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">APIs</h1>
+            <h1 className="text-2xl font-semibold">Gateway Services</h1>
             <p className="text-sm text-muted-foreground">
-              Monitor and manage all registered API endpoints
+              Manage service routes and API endpoints
             </p>
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                Register New API
+                Add Service Route
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Register New Service Route</DialogTitle>
+                <DialogTitle>Create Service Route</DialogTitle>
                 <DialogDescription>
-                  Add a new API endpoint to manage through NexusGate
+                  Add a new service route to the gateway
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="e.g., User Service"
-                    value={newRoute.name}
-                    onChange={(e) => setNewRoute({ ...newRoute, name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="path">Path</Label>
-                  <Input
-                    id="path"
-                    placeholder="e.g., /api/users"
-                    value={newRoute.path}
-                    onChange={(e) => setNewRoute({ ...newRoute, path: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="targetUrl">Target URL</Label>
-                  <Input
-                    id="targetUrl"
-                    placeholder="e.g., http://user-service:8080"
-                    value={newRoute.targetUrl}
-                    onChange={(e) => setNewRoute({ ...newRoute, targetUrl: e.target.value })}
-                  />
-                </div>
-              </div>
+              <RouteFormFields />
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreate}
-                  disabled={!newRoute.name || !newRoute.path || !newRoute.targetUrl || createMutation.isPending}
+                  disabled={!newRoute.serviceName || !newRoute.publicPath || !newRoute.targetUrl || createMutation.isPending}
                 >
                   {createMutation.isPending ? "Creating..." : "Create"}
                 </Button>
@@ -192,24 +341,20 @@ export default function APIs() {
           </Dialog>
         </div>
 
-        {/* Search and Filters */}
+        {/* Search */}
         <div className="flex gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search APIs by name or endpoint..."
+              placeholder="Search by name or path..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
             />
           </div>
-          <Button variant="outline" className="gap-2">
-            <Filter className="h-4 w-4" />
-            Filters
-          </Button>
         </div>
 
-        {/* APIs Table */}
+        {/* Table */}
         {error ? (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
             <p className="text-destructive">Failed to load service routes</p>
@@ -226,12 +371,14 @@ export default function APIs() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>API Name</TableHead>
+                  <TableHead>Service Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Public Path</TableHead>
+                  <TableHead>Target URL</TableHead>
+                  <TableHead>Methods</TableHead>
+                  <TableHead className="text-right">Limit/min</TableHead>
+                  <TableHead className="text-right">Limit/hr</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Requests/hr</TableHead>
-                  <TableHead className="text-right">P95 Latency</TableHead>
-                  <TableHead className="text-right">Error Rate</TableHead>
-                  <TableHead>Rate Limit Usage</TableHead>
                   <TableHead className="w-32">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -239,76 +386,61 @@ export default function APIs() {
                 {isLoading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-10 w-40" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                       <TableCell><Skeleton className="h-8 w-20" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredAPIs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {search ? "No APIs match your search" : "No service routes registered"}
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      {search ? "No services match your search" : "No service routes configured"}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredAPIs.map((api) => (
                     <TableRow key={api.id} className="group">
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{api.name}</p>
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {api.path}
-                          </p>
-                        </div>
+                      <TableCell className="font-medium">{api.serviceName}</TableCell>
+                      <TableCell className="max-w-[200px] truncate text-muted-foreground">
+                        {api.serviceDescription || "-"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{api.publicPath}</TableCell>
+                      <TableCell className="font-mono text-xs max-w-[200px] truncate">
+                        {api.targetUrl}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge
-                          variant={getHealthVariant(api)}
-                          pulse={api.healthStatus !== "healthy" && api.status === "active"}
-                        >
-                          {getHealthLabel(api)}
+                        <div className="flex flex-wrap gap-1">
+                          {api.allowedMethods.slice(0, 3).map((method) => (
+                            <span
+                              key={method}
+                              className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium"
+                            >
+                              {method}
+                            </span>
+                          ))}
+                          {api.allowedMethods.length > 3 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{api.allowedMethods.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {api.rateLimitPerMinute.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {api.rateLimitPerHour.toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={api.isActive ? "success" : "muted"}>
+                          {api.isActive ? "Active" : "Disabled"}
                         </StatusBadge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {(api.requestsPerHour || 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {api.p95Latency || 0}ms
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        <span
-                          className={
-                            (api.errorRate || 0) > 5
-                              ? "text-destructive"
-                              : (api.errorRate || 0) > 1
-                              ? "text-warning"
-                              : ""
-                          }
-                        >
-                          {api.errorRate || 0}%
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Progress
-                            value={api.rateLimitUsage || 0}
-                            className="h-1.5 w-20"
-                            indicatorClassName={
-                              (api.rateLimitUsage || 0) >= 90
-                                ? "bg-destructive"
-                                : (api.rateLimitUsage || 0) >= 70
-                                ? "bg-warning"
-                                : "bg-success"
-                            }
-                          />
-                          <span className="font-mono text-xs w-8">
-                            {api.rateLimitUsage || 0}%
-                          </span>
-                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -316,25 +448,36 @@ export default function APIs() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => handleToggle(api.id, api.name)}
+                            onClick={() => openViewDialog(api)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEditDialog(api)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleToggle(api.id, api.serviceName)}
                             disabled={toggleMutation.isPending}
                           >
-                            <Power className="h-4 w-4" />
+                            <Power className={`h-4 w-4 ${api.isActive ? "text-success" : "text-muted-foreground"}`} />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(api.id, api.name)}
+                            onClick={() => handleDelete(api.id, api.serviceName)}
                             disabled={deleteMutation.isPending}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                          <Link to={`/apis/${api.id}`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          </Link>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -344,6 +487,102 @@ export default function APIs() {
             </Table>
           </motion.div>
         )}
+
+        {/* Edit Dialog */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Service Route</DialogTitle>
+              <DialogDescription>
+                Update the service route configuration
+              </DialogDescription>
+            </DialogHeader>
+            <RouteFormFields />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpdate}
+                disabled={!newRoute.serviceName || !newRoute.publicPath || !newRoute.targetUrl || updateMutation.isPending}
+              >
+                {updateMutation.isPending ? "Updating..." : "Update"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Dialog */}
+        <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{selectedRoute?.serviceName}</DialogTitle>
+              <DialogDescription>Service route details</DialogDescription>
+            </DialogHeader>
+            {selectedRoute && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Public Path</p>
+                    <p className="font-mono">{selectedRoute.publicPath}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Target URL</p>
+                    <p className="font-mono text-xs break-all">{selectedRoute.targetUrl}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Rate Limit / Minute</p>
+                    <p className="font-mono">{selectedRoute.rateLimitPerMinute}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Rate Limit / Hour</p>
+                    <p className="font-mono">{selectedRoute.rateLimitPerHour}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Status</p>
+                    <StatusBadge variant={selectedRoute.isActive ? "success" : "muted"}>
+                      {selectedRoute.isActive ? "Active" : "Disabled"}
+                    </StatusBadge>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Created At</p>
+                    <p>{new Date(selectedRoute.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm mb-2">Allowed Methods</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedRoute.allowedMethods.map((method) => (
+                      <span
+                        key={method}
+                        className="rounded bg-secondary px-2 py-1 text-xs font-medium"
+                      >
+                        {method}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {selectedRoute.serviceDescription && (
+                  <div>
+                    <p className="text-muted-foreground text-sm mb-1">Description</p>
+                    <p className="text-sm">{selectedRoute.serviceDescription}</p>
+                  </div>
+                )}
+                {selectedRoute.notes && (
+                  <div>
+                    <p className="text-muted-foreground text-sm mb-1">Notes</p>
+                    <p className="text-sm">{selectedRoute.notes}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowViewDialog(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

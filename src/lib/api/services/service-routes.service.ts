@@ -1,8 +1,7 @@
 import { apiClient } from "../client";
-import { API_CONFIG } from "../config";
 import type { ServiceRoute, CreateServiceRoutePayload, UpdateServiceRoutePayload } from "../types";
 
-const BASE_URL = `${API_CONFIG.CONFIG_SERVICE_URL}/service-routes`;
+const BASE_URL = "/service-routes";
 
 export const serviceRoutesService = {
   // POST /service-routes - Create a new service route
@@ -11,32 +10,33 @@ export const serviceRoutesService = {
   },
 
   // GET /service-routes - Get all service routes
-  getAll: async (): Promise<ServiceRoute[]> => {
-    return apiClient.get<ServiceRoute[]>(BASE_URL);
+  getAll: async (activeOnly: boolean = false): Promise<ServiceRoute[]> => {
+    const query = activeOnly ? "?activeOnly=true" : "";
+    return apiClient.get<ServiceRoute[]>(`${BASE_URL}${query}`);
   },
 
   // GET /service-routes/{id} - Get service route by ID
-  getById: async (id: string): Promise<ServiceRoute> => {
+  getById: async (id: number): Promise<ServiceRoute> => {
     return apiClient.get<ServiceRoute>(`${BASE_URL}/${id}`);
   },
 
-  // GET /service-routes/by-path - Get service route by path
+  // GET /service-routes/by-path?path={path} - Get service route by path
   getByPath: async (path: string): Promise<ServiceRoute> => {
     return apiClient.get<ServiceRoute>(`${BASE_URL}/by-path?path=${encodeURIComponent(path)}`);
   },
 
   // PUT /service-routes/{id} - Update a service route
-  update: async (id: string, payload: UpdateServiceRoutePayload): Promise<ServiceRoute> => {
+  update: async (id: number, payload: UpdateServiceRoutePayload): Promise<ServiceRoute> => {
     return apiClient.put<ServiceRoute>(`${BASE_URL}/${id}`, payload);
   },
 
   // PATCH /service-routes/{id}/toggle - Toggle service route status
-  toggle: async (id: string): Promise<ServiceRoute> => {
+  toggle: async (id: number): Promise<ServiceRoute> => {
     return apiClient.patch<ServiceRoute>(`${BASE_URL}/${id}/toggle`);
   },
 
   // DELETE /service-routes/{id} - Delete a service route
-  delete: async (id: string): Promise<void> => {
+  delete: async (id: number): Promise<void> => {
     return apiClient.delete<void>(`${BASE_URL}/${id}`);
   },
 };
